@@ -136,10 +136,75 @@ def fr_events(centered_ts, bin_size, pre_event = 1.0, post_event = 3.0):
             
         all_fr.append(neuron_fr)
         mean_fr[nrn,:] = np.mean(neuron_fr, 0)
-        sem_fr[nrn,:] = np.std(neuron_fr, 0) / np.sqrt(nbins)
+        sem_fr[nrn,:] = np.std(neuron_fr, 0) / np.sqrt(ntrials)
     
     return all_fr, mean_fr, sem_fr, bin_edges
     
+
+def fr_events_binless(centered_ts, sigma_sec, trunc_gauss = 4, sampling_rate = 30000.0, sampling_out = 1000, pre_event = 1.0, post_event = 3.0):
+    """
+    A function that calculates firing rates in trials by applying gaussian kernel (binless).
+    
+    Arguments:
+    - centered_ts : list of lists of arrays (otuput of calc_raster)
+    - bin_size : integer (bin size in seconds)
+    - pre_event : integer (length of window before event, same as for calc_raster)
+        The default is 1.0.
+    - post_event : integer (length of window after event, same as for calc_raster)
+        The default is 3.0.
+    
+    Returns:
+    - all_fr: list of length n neurons; each item contains an array of size n trials x n time bins
+            and contains the calculated firing rate
+    mean_fr : array of size n neurons x n time bins for storing mean fr (across trials)
+    sem_fr : array of size n neurons x n time bins for storing standard error (across trials)
+
+    """
+    
+    # Calculate how big is your data etc.
+    nunits = len(centered_ts)
+    ntrials = len(centered_ts[0])
+    nsamples = int(np.round(sampling_out*pre_event + sampling_out*post_event))
+
+    t_vec = np.linspace(-pre_event + 1/sampling_out, post_event, nsamples)
+    
+
+    if sampling_out < 1000:
+        print("The desired output sampling rate is below 1kHz, which might cause overriding some spikes used "
+              "for the computation. Instead, you might consider downsampling the output of this function afterwards.")
+
+
+    # Create the gaussian window
+    sigma = sigma_sec * sampling_out
+    
+    gaussian = np.arange(-trunc_gauss*sigma, trunc_gauss*sigma + 1)
+    gaussian = 1 / (np.sqrt(2 * np.pi) * sigma) * np.e ** (-np.power(gaussian / sigma, 2) / 2) * sampling_out
+    #gaussian = np.exp(-(gaussian/sigma)**2/2) # a simpler formula - gives some weird scaling
+
+    
+    # Create empty list/arrays for storing results
+    all_fr = []
+    mean_fr = np.zeros([nunits, nsamples])
+    sem_fr = np.zeros([nunits, nsamples])
+    
+    # Do the firing rate calculation
+    for nrn in range(nunits):
+        neuron_fr = np.zeros([ntrials, nsamples])
+        
+        for trl in range(ntrials):
+            
+            where_spks = centered_ts[nrn][trl] + pre_event
+            where_spks = np.array(np.round(where_spks*sampling_out), int) # find spike indices with new sampling rate
+            where_spks[where_spks == nsamples] = where_spks[where_spks == nsamples] - 1
+    
+            neuron_fr[trl, where_spks] = 1 # set those indices in your data array to 1
+            neuron_fr[trl, :] = np.convolve(gaussian, neuron_fr[trl, :], 'same')
+            
+        all_fr.append(neuron_fr)
+        mean_fr[nrn,:] = np.mean(neuron_fr, 0)
+        sem_fr[nrn,:] = np.std(neuron_fr, 0) / np.sqrt(ntrials)
+    
+    return all_fr, mean_fr, sem_fr, t_vec
 
 
 def zscore_events(all_fr, bin_size, pre_event = 1.0, post_event = 3.0):
@@ -190,13 +255,13 @@ def zscore_events(all_fr, bin_size, pre_event = 1.0, post_event = 3.0):
             
         all_zsc.append(neuron_zsc)
         mean_zsc[nrn,:] = np.mean(neuron_zsc, 0)
-        sem_zsc[nrn,:] = np.std(neuron_zsc, 0) / np.sqrt(nbins)
+        sem_zsc[nrn,:] = np.std(neuron_zsc, 0) / np.sqrt(ntrials)
     
     return all_zsc, mean_zsc, sem_zsc, bin_edges
 
 
 
-def plot_psth(mean_data, sem_data, bin_edges):
+def plot_psth(mean_data, sem_data, t_vec):
     """
     A function for plotting peri-stimulus time histograms.
     Returns a figure with each neuron plotted on a separate subplot.
@@ -204,7 +269,7 @@ def plot_psth(mean_data, sem_data, bin_edges):
     Arguments: outputs of functions zscore_events or fr_events
         - mean_data : 2d array, mean responses of all neurons in a given time bin
         - sem_data : 2d array, SEM of responses of all neurons in a given time bin
-        - bin_edges : 1d array, borders of time bins to display on x axis
+        - t_vec : 1d array, values to display on x axis (if using bin_edges, set to bin_edges[1:])
 
     Returns:
         - fig: a matplotlib figure handle with individual eventplots for each neuron
@@ -219,16 +284,16 @@ def plot_psth(mean_data, sem_data, bin_edges):
     axes = axes.flatten()
     
     for nrn in range(nunits):
-        axes[nrn].plot(bin_edges[1:], mean_data[nrn,:])
+        axes[nrn].plot(t_vec, mean_data[nrn,:])
         y1 = mean_data[nrn,:] + sem_data[nrn,:]
         y2 = mean_data[nrn,:] - sem_data[nrn,:]
-        axes[nrn].fill_between(bin_edges[1:], y1, y2, alpha=0.5, zorder=2)
+        axes[nrn].fill_between(t_vec, y1, y2, alpha=0.5, zorder=2)
         axes[nrn].axvline(x = 0, linestyle = '--', color = 'gray', linewidth = 1)
 
     return fig, axes
 
 
-def plot_responses(centered_ts, mean_data, sem_data, bin_edges, save_dir, units_id = None, event_label = 'event'):
+def plot_responses(centered_ts, mean_data, sem_data, t_vec, save_dir, units_id = None, event_label = 'event'):
     
     """
     A function to plot raster & PSTH for each neuron and save as separate plots.   
@@ -249,10 +314,10 @@ def plot_responses(centered_ts, mean_data, sem_data, bin_edges, save_dir, units_
         axes[0].eventplot(centered_ts[nrn])
         axes[0].set_ylabel('Trial #')
     
-        axes[1].plot(bin_edges[1:], mean_data[nrn,:])
+        axes[1].plot(t_vec, mean_data[nrn,:])
         y1 = mean_data[nrn,:] + sem_data[nrn,:]
         y2 = mean_data[nrn,:] - sem_data[nrn,:]
-        axes[1].fill_between(bin_edges[1:], y1, y2, alpha=0.5, zorder=2)
+        axes[1].fill_between(t_vec, y1, y2, alpha=0.5, zorder=2)
         axes[1].axvline(x = 0, linestyle = '--', color = 'gray', linewidth = 1)
         axes[1].set_ylabel('Mean activity')
 
