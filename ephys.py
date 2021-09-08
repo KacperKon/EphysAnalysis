@@ -10,7 +10,7 @@ Required data format: output files from Phy2 spike sorting software.
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-
+from scipy.ndimage import gaussian_filter1d
 #%%
 def read_spikes(spks_dir, sampling_rate = 30000.0, read_only = "good"):
     """
@@ -176,8 +176,9 @@ def fr_events_binless(centered_ts, sigma_sec, trunc_gauss = 4, sampling_rate = 3
 
     # Create the gaussian window
     sigma = sigma_sec * sampling_out
+    halfwidth = trunc_gauss*sigma # half-width of gaussian window - full width is halfwidth * 2 + 1
     
-    gaussian = np.arange(-trunc_gauss*sigma, trunc_gauss*sigma + 1)
+    gaussian = np.arange(-halfwidth, halfwidth + 1)
     gaussian = 1 / (np.sqrt(2 * np.pi) * sigma) * np.e ** (-np.power(gaussian / sigma, 2) / 2) * sampling_out
     #gaussian = np.exp(-(gaussian/sigma)**2/2) # a simpler formula - gives some weird scaling
 
@@ -187,18 +188,19 @@ def fr_events_binless(centered_ts, sigma_sec, trunc_gauss = 4, sampling_rate = 3
     mean_fr = np.zeros([nunits, nsamples])
     sem_fr = np.zeros([nunits, nsamples])
     
-    # Do the firing rate calculation
+    # Do the firing rate calculation (convolve binarized spikes with the gaussian)
     for nrn in range(nunits):
         neuron_fr = np.zeros([ntrials, nsamples])
         
         for trl in range(ntrials):
             
             where_spks = centered_ts[nrn][trl] + pre_event
-            where_spks = np.array(np.round(where_spks*sampling_out), int) # find spike indices with new sampling rate
-            where_spks[where_spks == nsamples] = where_spks[where_spks == nsamples] - 1
+            where_spks = np.array(np.round(where_spks*sampling_out), int) # find spike indices with the new sampling rate
+            where_spks[where_spks == nsamples] = where_spks[where_spks == nsamples] - 1 # avoid rounding timestamps to indices bigger than data length
     
-            neuron_fr[trl, where_spks] = 1 # set those indices in your data array to 1
-            neuron_fr[trl, :] = np.convolve(gaussian, neuron_fr[trl, :], 'same')
+            neuron_fr[trl, where_spks] = 1 # code spikes as 1
+            #neuron_fr[trl, :] = np.convolve(gaussian, neuron_fr[trl, :], 'same') # do the convoloution
+            neuron_fr[trl, :] = gaussian_filter1d(neuron_fr[trl, :], sigma, mode = 'reflect') * sampling_out
             
         all_fr.append(neuron_fr)
         mean_fr[nrn,:] = np.mean(neuron_fr, 0)
