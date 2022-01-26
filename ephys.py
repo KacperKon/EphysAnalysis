@@ -349,4 +349,47 @@ def plot_responses(centered_ts, mean_data, sem_data, t_vec, save_dir, units_id =
         plt.close(fig)
         
     plt.ion()
+   
     
+def plot_resp_zsc(centered_ts, mean_data, sem_data, mean_data2, sem_data2, t_vec, save_dir, units_id = None, event_label = 'event'):
+    
+    """
+    A function to plot raster and 2 PSTHs (eg., raw and zscored) for each neuron and save as separate plots.   
+    
+    """
+    
+    # Turn off automatic display - we want to save plots as images, not show them
+    plt.ioff() 
+    
+    nunits = len(centered_ts)
+    if units_id == None:
+        units_id = np.arange(nunits)
+    
+    for nrn in range(nunits):
+        fig, axes = plt.subplots(3, 1, sharex = 'col')
+        axes = axes.flatten()
+        
+        axes[0].eventplot(centered_ts[nrn])
+        axes[0].set_ylabel('Trial #')
+    
+        axes[1].plot(t_vec, mean_data[nrn,:])
+        y1 = mean_data[nrn,:] + sem_data[nrn,:]
+        y2 = mean_data[nrn,:] - sem_data[nrn,:]
+        axes[1].fill_between(t_vec, y1, y2, alpha=0.5, zorder=2)
+        axes[1].axvline(x = 0, linestyle = '--', color = 'gray', linewidth = 1)
+        axes[1].set_ylabel('Firing rate (Hz)')
+        
+        axes[2].plot(t_vec, mean_data2[nrn,:])
+        y1 = mean_data2[nrn,:] + sem_data2[nrn,:]
+        y2 = mean_data2[nrn,:] - sem_data2[nrn,:]
+        axes[2].fill_between(t_vec, y1, y2, alpha=0.5, zorder=2)
+        axes[2].axvline(x = 0, linestyle = '--', color = 'gray', linewidth = 1)
+        axes[2].set_ylabel('Z-score')
+
+        fig.suptitle('Responses to ' + event_label)
+        plt.xlabel('Time [sec]')
+        
+        fig.savefig(save_dir + str(units_id[nrn]) + '.png')
+        plt.close(fig)
+        
+    plt.ion() 

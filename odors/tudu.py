@@ -13,3 +13,5 @@ Created on Mon Jan 24 17:23:58 2022
 # Change plotting function:
     # trim the gaussian window
     # make new directory if it doesn't xist
+    
+# Quantitative comparison - fr by depth
