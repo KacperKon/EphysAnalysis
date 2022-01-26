@@ -185,12 +185,12 @@ def fr_events_binless(centered_ts, sigma_sec, trunc_gauss = 4, sampling_rate = 3
     
     # Create empty list/arrays for storing results
     all_fr = []
-    mean_fr = np.zeros([nunits, nsamples])
-    sem_fr = np.zeros([nunits, nsamples])
+    mean_fr = np.zeros([nunits, nsamples], dtype='f')
+    sem_fr = np.zeros([nunits, nsamples], dtype='f')
     
     # Do the firing rate calculation (convolve binarized spikes with the gaussian)
     for nrn in range(nunits):
-        neuron_fr = np.zeros([ntrials, nsamples])
+        neuron_fr = np.zeros([ntrials, nsamples], , dtype='f')
         
         for trl in range(ntrials):
             
