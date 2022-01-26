@@ -141,7 +141,7 @@ def fr_events(centered_ts, bin_size, pre_event = 1.0, post_event = 3.0):
     return all_fr, mean_fr, sem_fr, bin_edges
     
 
-def fr_events_binless(centered_ts, sigma_sec, trunc_gauss = 4, sampling_rate = 30000.0, sampling_out = 1000, pre_event = 1.0, post_event = 3.0):
+def fr_events_binless(centered_ts, sigma_sec, trunc_gauss = 4, sampling_out = 1000, pre_event = 1.0, post_event = 3.0):
     """
     A function that calculates firing rates in trials by applying gaussian kernel (binless).
     
@@ -158,6 +158,9 @@ def fr_events_binless(centered_ts, sigma_sec, trunc_gauss = 4, sampling_rate = 3
             and contains the calculated firing rate
     mean_fr : array of size n neurons x n time bins for storing mean fr (across trials)
     sem_fr : array of size n neurons x n time bins for storing standard error (across trials)
+    
+    Note: In the current version, the function might cause problems if 1000 cannot be evenly divided
+        by selected sampling_out.
 
     """
     
@@ -165,15 +168,33 @@ def fr_events_binless(centered_ts, sigma_sec, trunc_gauss = 4, sampling_rate = 3
     nunits = len(centered_ts)
     ntrials = len(centered_ts[0])
     nsamples = int(np.round(sampling_out*pre_event + sampling_out*post_event))
-
     t_vec = np.linspace(-pre_event + 1/sampling_out, post_event, nsamples)
     
-
+    # Create empty list/arrays for storing results
+    all_fr = []
+    mean_fr = np.zeros([nunits, nsamples], dtype='f')
+    sem_fr = np.zeros([nunits, nsamples], dtype='f')
+    
+    # If desired out sampling is lower than 1kHz, avoid overwriting spikes 
     if sampling_out < 1000:
-        print("The desired output sampling rate is below 1kHz, which might cause overriding some spikes used "
-              "for the computation. Instead, you might consider downsampling the output of this function afterwards.")
-
-
+        downsample = True
+        sampling_out_ds = sampling_out
+        sampling_out = 1000
+        nsamples = int(np.round(sampling_out*pre_event + sampling_out*post_event))
+        ds_by = int(sampling_out / sampling_out_ds)
+        
+        nsamples_ds = int(nsamples / ds_by)
+        t_vec = np.linspace(-pre_event + 1/sampling_out_ds, post_event, nsamples_ds)
+        
+        mean_fr = np.zeros([nunits, nsamples_ds], dtype='f')
+        sem_fr = np.zeros([nunits, nsamples_ds], dtype='f')
+        
+        print("Calculation performed with 1kHz sampling rate, but the final "  
+              "output will be downsampled by the factor of", str(ds_by))
+    
+    else:
+        downsample = False
+    
     # Create the gaussian window
     sigma = sigma_sec * sampling_out
     halfwidth = trunc_gauss*sigma # half-width of gaussian window - full width is halfwidth * 2 + 1
@@ -182,15 +203,9 @@ def fr_events_binless(centered_ts, sigma_sec, trunc_gauss = 4, sampling_rate = 3
     gaussian = 1 / (np.sqrt(2 * np.pi) * sigma) * np.e ** (-np.power(gaussian / sigma, 2) / 2) * sampling_out
     #gaussian = np.exp(-(gaussian/sigma)**2/2) # a simpler formula - gives some weird scaling
 
-    
-    # Create empty list/arrays for storing results
-    all_fr = []
-    mean_fr = np.zeros([nunits, nsamples], dtype='f')
-    sem_fr = np.zeros([nunits, nsamples], dtype='f')
-    
     # Do the firing rate calculation (convolve binarized spikes with the gaussian)
     for nrn in range(nunits):
-        neuron_fr = np.zeros([ntrials, nsamples], , dtype='f')
+        neuron_fr = np.zeros([ntrials, nsamples], dtype='f')
         
         for trl in range(ntrials):
             
@@ -202,10 +217,13 @@ def fr_events_binless(centered_ts, sigma_sec, trunc_gauss = 4, sampling_rate = 3
             #neuron_fr[trl, :] = np.convolve(gaussian, neuron_fr[trl, :], 'same') # do the convoloution
             neuron_fr[trl, :] = gaussian_filter1d(neuron_fr[trl, :], sigma, mode = 'reflect') * sampling_out
             
+        if downsample == True:
+            neuron_fr = neuron_fr[:,::ds_by]
+    
         all_fr.append(neuron_fr)
         mean_fr[nrn,:] = np.mean(neuron_fr, 0)
         sem_fr[nrn,:] = np.std(neuron_fr, 0) / np.sqrt(ntrials)
-    
+        
     return all_fr, mean_fr, sem_fr, t_vec
 
 

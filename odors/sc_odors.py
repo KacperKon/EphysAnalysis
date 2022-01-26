@@ -22,8 +22,7 @@ import os
 pre_event = 3
 post_event = 6
 bin_size = 0.25
-save_dir = 'C:\\Users\\Kacper\\Desktop\\PSAM_SC\\rasters\\'
-
+save_dir = 'C:\\Users\\Kacper\\Desktop\\PSAM_SC\\rasters_test\\'
 
 #%% Specify files and paths
 sess_ids = ['211207_KK006', '211207_KK007', '211208_KK006', '211208_KK007', \
@@ -54,6 +53,10 @@ sniffs = st.import_sniff_mat(sniff_dir)
 #all_ts = spikes_ts + mua_ts
 #all_id = np.concatenate([units_id, mua_id])
 
+
+new1, new2, new3, new4 = ep.fr_events_binless(cntrd_ts[7], 0.100, 4, 50, pre_event, post_event)
+
+
 #%% Calculate rasterplots
 cntrd_ts = []
 all_fr = []; mean_fr = []; sem_fr = []; t_vec = []
@@ -63,15 +66,19 @@ for idx, ses in enumerate(spks_ts):
     
     tmp = ep.calc_rasters(ses, sniffs[idx]['ephys_onsets'], pre_event, post_event)
     cntrd_ts.append(tmp)
-    
-    tmp = ep.fr_events_binless(cntrd_ts[idx], 0.100, 4, 30000.0, 1000, pre_event, post_event)
+
+    tmp = ep.fr_events_binless(cntrd_ts[idx], 0.100, 4, 50, pre_event, post_event)
     all_fr.append(tmp[0])
     mean_fr.append(tmp[1])
     sem_fr.append(tmp[2])
     t_vec.append(tmp[3])
     
 print('Done!')
-    
+
+
+#%% Calculate zscores
+
+#all_zsc, mean_zsc, sem_zsc, bin_edges = ep.zscore_events(all_fr, bin_size, pre_event, post_event)    
     
 #%% Save raster plots + mean firing rate
 for ii in range(len(cntrd_ts)):
