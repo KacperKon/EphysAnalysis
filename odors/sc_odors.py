@@ -160,6 +160,7 @@ which_av = np.arange(int(ifr_sr*pre_event), int(ifr_sr*pre_event+ifr_sr*3))
 
 for s in range(nses):
     tmp = np.mean(mean_zsc[s][:, which_av], 1)
+    #tmp = np.argmax(mean_zsc[s][:, which_av], 1) / ifr_sr
     grav.append(tmp)
 
     nunits = len(spks_id[s])
@@ -174,6 +175,8 @@ rec_pairs = [[0, 4], [1, 5], [2, 6], [3, 7]]
 rec_des = ['saline', 'saline', 'PSEM', 'PSEM', 'saline', 'saline', 'PSEM', 'PSEM']
 
 save_dir = save_plots + 'response_locations\\'
+#save_dir = save_plots + 'response_latencies\\'
+
 if not os.path.exists(save_dir):
     os.makedirs(save_dir)
 
@@ -194,7 +197,96 @@ for pair in rec_pairs:
     
     plt.savefig(save_dir + fig_title + '.png', dpi = 250)
     
+#%% Check odorant selectivity
+tr_cat = st.select_trials_nov(sniffs,1,1,1,1)[0]
+unique_odors = [np.unique(sniffs[s]['trial_chem_id']) for s in range(nses)]
+n_odors = [unique_odors[s].size for s in range(nses)]
+
+save_dir = save_plots + 'odor_selectivity_novel\\'
+#save_dir = save_plots + 'odor_selectivity_familiar\\'
+if not os.path.exists(save_dir):
+    os.makedirs(save_dir)
+plt.ioff()
+
+for s in range(nses):
+    print('Session ' + str(s+1) + ' from ' + str(nses))
+    tmp_dir = save_dir + sess_ids[s] + '\\'
+    if not os.path.exists(tmp_dir):
+        os.mkdir(tmp_dir)
     
+    for nrn in range(len(cntrd_ts[s])):
+        fig, axes = plt.subplots(2, 1, sharex = True, figsize = (4,8))
+        cmap = plt.get_cmap("tab10")
+        axes = axes.flatten() 
+        a = 0
+        
+        ymax = 0
+        for o, odor in enumerate(unique_odors[s]):
+            odor_idxs = np.logical_and(sniffs[s]['trial_chem_id'] == odor, tr_cat[s][:,1]) 
+            #odor_idxs = sniffs[s]['trial_chem_id'] == odor 
+            odor_idxs = sniffs[s]['trial_idx'][odor_idxs] - 1
+        
+            if odor_idxs.size > 0:
+                tmp = [cntrd_ts[s][nrn][i] for i in odor_idxs]
+                ymin = ymax
+                ymax = ymax + len(tmp)  
+                ypos = np.arange(ymin, ymax)
+                    
+                axes[0].eventplot(tmp, color = cmap(a), lineoffsets = ypos)
+                axes[1].plot(t_vec[s], np.mean(all_fr[s][nrn][odor_idxs,:], 0), color = cmap(a))
+                a = a + 1
+        
+        fig.savefig(tmp_dir + str(spks_id[s][nrn]) + '.png', dpi = 250)
+        plt.close(fig)
+        
+plt.ion()
+
+#%% Check odorant selectivity
+tr_cat = st.select_trials_nov(sniffs,1,1,1,1)[0]
+unique_odors = [np.unique(sniffs[s]['trial_chem_id']) for s in range(nses)]
+n_odors = [unique_odors[s].size for s in range(nses)]
+
+save_dir = save_plots + 'odor_selectivity_zscored\\'
+#save_dir = save_plots + 'odor_selectivity_familiar\\'
+if not os.path.exists(save_dir):
+    os.makedirs(save_dir)
+plt.ioff()
+
+for s in range(nses):
+    print('Session ' + str(s+1) + ' from ' + str(nses))
+    tmp_dir = save_dir + sess_ids[s] + '\\'
+    if not os.path.exists(tmp_dir):
+        os.mkdir(tmp_dir)
+    
+    for nrn in range(len(cntrd_ts[s])):
+        fig, axes = plt.subplots(2, 2, sharex = 'col', sharey = 'row')
+        cmap = plt.get_cmap("tab10") 
+        a = 0
+        
+        for cat in range(2):
+            ymax = 0
+        
+            for o, odor in enumerate(unique_odors[s]):
+                odor_idxs = np.logical_and(sniffs[s]['trial_chem_id'] == odor, tr_cat[s][:,cat]) 
+                #odor_idxs = sniffs[s]['trial_chem_id'] == odor 
+                odor_idxs = sniffs[s]['trial_idx'][odor_idxs] - 1
+            
+                if odor_idxs.size > 0:
+                    tmp = [cntrd_ts[s][nrn][i] for i in odor_idxs]
+                    ymin = ymax
+                    ymax = ymax + len(tmp)  
+                    ypos = np.arange(ymin, ymax)
+                        
+                    axes[0, cat].eventplot(tmp, color = cmap(a), lineoffsets = ypos, linewidths = 0.5)
+                    axes[1, cat].plot(t_vec[s], np.mean(all_zsc[s][nrn][odor_idxs,:], 0), color = cmap(a))
+                    a = a + 1
+        
+        #axes[1,0].sharey(axes[1,1])
+        fig.savefig(tmp_dir + str(spks_id[s][nrn]) + '.png', dpi = 250)
+        plt.close(fig)
+        
+plt.ion()
+            
 #%% Select novel odors
 tr_cat, tr_incl = st.select_trials_nov(sniffs, fam_min=5, fam_max=5, nov_min=1, nov_max=1)
 ncat = tr_cat[0].shape[1]
