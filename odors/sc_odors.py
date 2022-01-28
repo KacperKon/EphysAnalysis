@@ -24,9 +24,6 @@ post_event = 6
 bin_size = 0.25
 ifr_sr = 50 # number of data points / sec for instantenous firing rate
 save_plots = 'C:\\Users\\Kacper\\Desktop\\PSAM_SC\\plots\\'
-save_dir = 'C:\\Users\\Kacper\\Desktop\\PSAM_SC\\rasters\\'
-save_dir_z = 'C:\\Users\\Kacper\\Desktop\\PSAM_SC\\rasters_zscored\\'
-save_dir_both = 'C:\\Users\\Kacper\\Desktop\\PSAM_SC\\rasters_all\\'
 
 if not os.path.exists(save_plots):
     os.makedirs(save_plots)
@@ -93,7 +90,6 @@ for idx, ses in enumerate(spks_ts):
     
 print('Done!')
 
-
 #%% Calculate zscores
 all_zsc = []; mean_zsc = []; sem_zsc = []; bin_edges = []
 
@@ -105,36 +101,15 @@ for s in range(nses):
     sem_zsc.append(tmp[2])
     bin_edges.append(tmp[3])
     
-#%% Save raster plots + mean firing rate
+#%% Save rasters, mean firing and z-score on 1 plot
+save_dir = save_plots + 'rasters_all\\'
+if not os.path.exists(save_dir):
+    os.makedirs(save_dir)
+
 for ii in range(nses):
     tmp = save_dir + sess_ids[ii] + '\\'
     os.mkdir(tmp)
-    ep.plot_responses(cntrd_ts[ii], mean_fr[ii], sem_fr[ii], t_vec[ii], tmp)
-    
-#%% The same with zscore
-for ii in range(nses):
-    tmp = save_dir_both + sess_ids[ii] + '\\'
-    os.mkdir(tmp)
-    ep.plot_responses(cntrd_ts[ii], mean_zsc[ii], sem_zsc[ii], t_vec[ii], tmp)
-
-#%% Both on 1 plot
-for ii in range(nses):
-    tmp = save_dir_both + sess_ids[ii] + '\\'
-    os.mkdir(tmp)
     ep.plot_resp_zsc(cntrd_ts[ii], mean_fr[ii], sem_fr[ii], mean_zsc[ii], sem_zsc[ii], t_vec[ii], tmp)
-
-#%% Plot responses of all neurons using one heatmap
-
-for s in range(nses):
-    plt.figure()
-    sortby = np.mean(mean_zsc[s][:, int(ifr_sr*pre_event) : int(ifr_sr*pre_event+ifr_sr*6)], 1).argsort()
-    fig = sns.heatmap(mean_zsc[s][sortby, :], vmin = -1, vmax = 3, cmap = 'inferno')
-    
-    xlabs = np.round(t_vec[s][::ifr_sr])
-    xlabs = np.linspace(-pre_event, post_event, pre_event+post_event+1)
-    xticks = np.linspace(0,mean_zsc[s].shape[1],len(xlabs))
-    fig.set_xticks(xticks)
-    fig.set_xticklabels(xlabs)
     
 #%% Plot responses of all neurons using one heatmap
 
@@ -235,11 +210,6 @@ for m in [4]:
         
         mean_data = np.mean(all_fr[4][23][which_incl], 0, keepdims=True)
         sem_data = np.std(all_fr[4][23][which_incl], 0, keepdims=True) / np.sqrt(which_incl.size)
-
-#save_dir = 'C:\\Users\\Kacper\\Desktop\\PSAM_SC\\test\\'
-#ep.plot_responses([res_list], mean_data, sem_data, t_vec[0], save_dir)
-
-#%% Average by occurence
 
 #%% Maybe restructure data to 3 dim matrix?
 # If you have odor x occurence x time points, it would be easy to average by them
