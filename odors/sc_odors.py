@@ -203,7 +203,7 @@ tr_cat = st.select_trials_nov(sniffs,1,1,1,1)[0]
 unique_odors = [np.unique(sniffs[s]['trial_chem_id']) for s in range(nses)]
 n_odors = [unique_odors[s].size for s in range(nses)]
 
-save_dir = save_plots + 'odor_selectivity_fr\\'
+save_dir = save_plots + 'odor_selectivity_testy\\'
 if not os.path.exists(save_dir):
     os.makedirs(save_dir)
 plt.ioff()
@@ -229,7 +229,7 @@ for s in range(nses):
             
                 if odor_idxs.size > 0:
                     tmp = [cntrd_ts[s][nrn][i] for i in odor_idxs]
-                    tmp2 = all_fr[s][nrn][odor_idxs,:]
+                    tmp2 = all_zsc[s][nrn][odor_idxs,:]
                     ymin = ymax
                     ymax = ymax + len(tmp)  
                     ypos = np.arange(ymin, ymax)
@@ -250,7 +250,7 @@ for s in range(nses):
                     
                     axes[1,cat].set_xlabel("Time from odor [sec]", size = 6, labelpad = 0)
                     axes[0,0].set_ylabel("Trial", size = 6, labelpad = 0)
-                    axes[1,0].set_ylabel("Mean firing rate", size = 6, labelpad = 0)
+                    axes[1,0].set_ylabel("Mean z-score", size = 6, labelpad = 0)
                     
                     ## Bottom row ##
                     axes[2,cat].tick_params(axis="both",direction="in", labelsize = 6)
@@ -267,65 +267,96 @@ for s in range(nses):
         plt.close(fig)
         
 plt.ion()
-            
-#%% Select novel odors
-tr_cat, tr_incl = st.select_trials_nov(sniffs, fam_min=5, fam_max=5, nov_min=1, nov_max=1)
-ncat = tr_cat[0].shape[1]
 
-#for m in range(nses):
-for m in [4]:
-    for cat in range(ncat-1):
-        which_incl = sniffs[m]['trial_idx'][np.where(tr_incl[m][:,cat] == 1)] - 1 # IN MATLAB TRIAL INDEXES START FROM 1!!
-        
-        plt.figure()
-        res_list = [cntrd_ts[m][23][i] for i in which_incl]
-        plt.eventplot(res_list)
-        
-        mean_data = np.mean(all_fr[4][23][which_incl], 0, keepdims=True)
-        sem_data = np.std(all_fr[4][23][which_incl], 0, keepdims=True) / np.sqrt(which_incl.size)
+#%% Play with novelty preference score
 
-#%% Maybe restructure data to 3 dim matrix?
-# If you have odor x occurence x time points, it would be easy to average by them
+from sklearn.linear_model import LinearRegression
+hab_index = []
 
-occur = [1,2,3,4,5,6,7,8,9,10]
-npres = max(occur)
-nbins = len(t_vec[0])
+av_win = [pre_event*ifr_sr, pre_event*ifr_sr+3*ifr_sr]
 
-for s in range(5,6): # NOW ONLY 1 MOUSE
-    nunits = len(all_zsc[s])
+for s in range(nses):
+    #fig, axes = plt.subplots(1, 2, sharex='row', sharey='row')
+    fig = plt.figure()
+    cmap = plt.get_cmap("tab10") 
+    a = 0
+    nunits = len(cntrd_ts[s])
+    hab_index.append(np.zeros([nunits, 2]))
     
     for nrn in range(nunits):
-        zsc_by_oc = np.zeros([npres, nbins])
+       
+        for cat in range(2):
+            first_pres = []
+            last_pres = []
+            for o, odor in enumerate(unique_odors[s]):
+                which_rows = np.logical_and(sniffs[s]['trial_chem_id'] == odor, tr_cat[s][:,cat]) 
+                odor_idxs = sniffs[s]['trial_idx'][which_rows] - 1
+                if odor_idxs.size > 0:
+                    tmp = all_fr[s][nrn][odor_idxs,:]
+                    # Calculate average response in 3 first and 3 last trials
+                    first_pres.append(np.mean(np.mean(tmp[:3, av_win[0]:av_win[1]], 1)))
+                    last_pres.append(np.mean(np.mean(tmp[3:6, av_win[0]:av_win[1]], 1))) 
+                    
+                    #axes[cat].scatter(last_pres, first_pres, color = cmap(a))
+            first_pres=np.array(first_pres)
+            last_pres = np.array(last_pres, ndmin = 2).T
+            reg = LinearRegression(fit_intercept = False).fit(last_pres, first_pres)
+            
+            #x = last_pres[:,np.newaxis]
+            #y = first_pres
+            a, _, _, _ = np.linalg.lstsq(last_pres, first_pres)
+            if not reg.coef_ == a:
+                print(reg.coef_, a)
+            
+            if not reg.coef_ == 0:
+                hab_index[s][nrn, cat] = reg.coef_ - 1.0
+            else:
+                hab_index[s][nrn, cat] = np.nan
+            
+            # # PLot if modulation score is calculated properly 
+            # if (s >= 4) and (s <= 5):
+            #     plt.figure()
+            #     plt.scatter(last_pres, first_pres)
+                
+            #     plt.xlabel('Response in trials 4-6')
+            #     plt.ylabel('Response in trials 1-3')
+                
+            #     ylim = plt.gca().get_ylim()
+            #     xlim = plt.gca().get_xlim()
+            #     hmax = np.max([ylim[1], xlim[1]])
+            #     plt.ylim(0, hmax)
+            #     plt.xlim(0, hmax)
+                
+            #     plt.plot([0, hmax], [0, hmax])
+            #     plt.plot([0, hmax], [0, hmax*(hab_index[s][nrn, cat]+1)])
+            #     plt.annotate(str(hab_index[s][nrn, cat]), [0.05, 0])
         
-        for oc in occur:
-            tr_cat, tr_incl = st.select_trials_nov(sniffs, oc , oc, oc, oc)
-            cat = 0 # novel
-            which_incl = sniffs[s]['trial_idx'][np.where(tr_incl[s][:,cat] == 1)] - 1 # IN MATLAB TRIAL INDEXES START FROM 1!!
-
-            tmp = all_zsc[s][nrn][which_incl, :]
-            tmp_mean = np.mean(tmp, 0)
-            #tmp_sem = np.std(tmp, 0) / np.sqrt(tmp.size[0])
-            zsc_by_oc[oc-1, :] = tmp_mean
-        
-        plt.figure()
-        sns.heatmap(zsc_by_oc, vmin = -1, vmax = 3, cmap = 'inferno')
+            
+    hist_edges = np.arange(-2,2,0.05)
+    #plt.hist(hab_index[s][:, 0], hist_edges, histtype='step', alpha = 0.5)
+    plt.hist(hab_index[s][:, 1], hist_edges, histtype='step')
+    
+            # axes[cat].scatter(last_pres, first_pres)
+            # axes[cat].plot([0, 1], [0, 1], transform=axes[cat].transAxes)
 
 #%%
-for s in range(5,6): # NOW ONLY 1 MOUSE
-    nunits = len(all_zsc[s])
-    
-    for nrn in range(nunits):
-        zsc_by_oc = np.zeros([npres, nbins])
-        
-        tr_cat, tr_incl = st.select_trials_nov(sniffs, oc , oc, oc, oc)
-        cat = 0 # novel
-        which_incl = sniffs[s]['trial_idx'][10:24] # - 1 # IN MATLAB TRIAL INDEXES START FROM 1!!
+sal_idxs = [0,1,4,5]
+psam_idxs = [2,3,6,7]
+hab_sal = []
+hab_psam = []
+[hab_sal.append(hab_index[s]) for s in sal_idxs]
+[hab_psam.append(hab_index[s]) for s in psam_idxs]
 
-        tmp = all_zsc[s][nrn][which_incl, :]
-        tmp_mean = np.mean(tmp, 0)
-        
-        res_list = [cntrd_ts[s][nrn][i] for i in which_incl]
-        plt.figure()
-        plt.eventplot(res_list)
-            
-        
+hab_sal = np.vstack(hab_sal)
+hab_psam = np.vstack(hab_psam)
+
+plt.hist(hab_sal[:, 1], hist_edges, histtype='step')
+plt.axvline([0], linestyle = '--', color = 'gray')
+plt.xlim([-2, 2])
+
+plt.ylabel('No. of neurons')
+plt.xlabel('Modulation index')
+#plt.figure()
+#plt.hist(hab_psam[:, 1], hist_edges, histtype='step')
+
+                    

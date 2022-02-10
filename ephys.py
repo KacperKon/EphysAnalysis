@@ -393,3 +393,49 @@ def plot_resp_zsc(centered_ts, mean_data, sem_data, mean_data2, sem_data2, t_vec
         plt.close(fig)
         
     plt.ion() 
+
+
+def fr_by_chan(spikes_ts, units_id, cluster_info_dir, bin_size):
+    """
+    Calculate overall firing rate per channel in specific time bins.
+    
+
+    Parameters
+    ----------
+    spikes_ts : list of arrays with spike times
+    units_id : cluster id
+    cluster_info_dir : path to cluster_info.tsv file
+    bin_size : size of bin (in seconds)
+
+    Returns
+    -------
+    all_fr : matrix size n channels (assumes 384) per n time bins
+    mean_fr: vector of size n channels, with mean firing rate
+    bin_edges : bin egdes in seconds
+    """
+    
+    
+    clst_info = pd.read_csv(cluster_info_dir + "cluster_info.tsv", sep='\t')
+
+    nchans = 383
+    nunits = len(spikes_ts)
+    max_t = np.round(np.max([np.max(x) for x in spikes_ts])) # It's rounding!!
+    
+    bin_edges = np.arange(0, max_t, bin_size)
+    nbins = bin_edges.size - 1
+    
+    all_fr = np.zeros([nchans, nbins])
+        
+    for nrn in range(nunits):
+        spks_in_bins = np.histogram(spikes_ts[nrn], bin_edges)[0]
+        
+        which_chan = int(clst_info['ch'][clst_info['id']==units_id[nrn]])
+        
+        all_fr[which_chan, :] = all_fr[which_chan, :] + spks_in_bins
+        
+        #fr_in_bins = spks_in_bins[0]*1 / bin_size
+        #all_fr[nrn, :] = fr_in_bins[:]    
+    all_fr = all_fr / bin_size
+    mean_fr = np.mean(all_fr, 1)
+
+    return all_fr, mean_fr, bin_edges
