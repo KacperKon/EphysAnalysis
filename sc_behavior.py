@@ -20,8 +20,9 @@ pup_nframes = 373 # the same for pupil camera
 pup_sr = pup_nframes/12
 sigma = 0.25
 binsize = 2 # for binned analysis, bin size in seconds
-odor_start = 4
-odor_end = 6
+est_lat = 0.8 # estimated olfactometer latency
+odor_start = 4 + est_lat
+odor_end = 6 + est_lat
 bsln_start = 1
 ndays = 4
 sniff_the_bin = [6, 8] # concentrate on this part - from 1 sec to 3 sec after odor presentation
@@ -102,7 +103,7 @@ for m in range(nses):
 #%% Plot breathing across time for some selected trials
 fig, axes = plt.subplots(int(nses/nmice), 1, sharex = 'all', sharey='all', figsize = (6, 9))
 axes = axes.flatten()
-tvec = np.linspace(-4, 7, nframes)
+tvec = np.linspace(-4, 7, nframes) - est_lat
 
 for row, m in enumerate(sal_ses):
     
@@ -118,6 +119,9 @@ for row, m in enumerate(sal_ses):
     axes[row].plot(tvec, sniff_av[:,m+nmice,1], label = 'NOV DREADD', color = 'C0', linestyle = '--')
     axes[row].fill_between(tvec, sniff_av[:,m+nmice,1] + sniff_sem[:,m+nmice,1], sniff_av[:,m+nmice,1] - sniff_sem[:,m+nmice,1], alpha = 0.2, color = 'C0')
     
+    axes[row].axvline(x = 0, linestyle = '--', color = 'gray', linewidth = 1)
+    axes[row].axvline(x = 2, linestyle = '--', color = 'gray', linewidth = 1)
+
     axes[row].set_ylabel(u"\u0394" + ' sniffing [inh/sec]')
     
     ax2 = axes[row].twinx()
@@ -127,7 +131,7 @@ for row, m in enumerate(sal_ses):
     
     
 axes[row].legend()
-axes[row].set_xlabel('Time from odor presentation [sec]')
+axes[row].set_xlabel('Time from estimated odor presentation [sec]')
 fig.suptitle(incl_descr)
 
 plt.savefig(fig_path + '\\Sniff_' + incl_descr + '.png')
@@ -164,7 +168,7 @@ plt.savefig(fig_path + '\\Sniff_hab.png')
 #%% Plot pupil for selected trials
 fig, axes = plt.subplots(int(nses/nmice), 1, sharex = 'all', sharey='all', figsize = (6, 9))
 axes = axes.flatten()
-tvec = np.linspace(-4, 8, pup_nframes)
+tvec = np.linspace(-4, 8, pup_nframes) - est_lat
 
 for row, m in enumerate(sal_ses):
     axes[row].plot(tvec, pup_av[:,m,0], label = 'FAM SAL', color = 'C7', linestyle = '-')
@@ -179,6 +183,8 @@ for row, m in enumerate(sal_ses):
     axes[row].plot(tvec, pup_av[:,m+nmice,1], label = 'NOV DREADD', color = 'C0', linestyle = '--')
     axes[row].fill_between(tvec, pup_av[:,m+nmice,1] + pup_sem[:,m+nmice,1], pup_av[:,m+nmice,1] - pup_sem[:,m+nmice,1], alpha = 0.2, color = 'C0')
 
+    axes[row].axvline(x = 0, linestyle = '--', color = 'gray', linewidth = 1)
+    axes[row].axvline(x = 2, linestyle = '--', color = 'gray', linewidth = 1)
     
     axes[row].set_ylabel(u"\u0394" + ' pupil dilation [au]')
     
@@ -189,7 +195,7 @@ for row, m in enumerate(sal_ses):
     
     
 axes[row].legend()
-axes[row].set_xlabel('Time from odor presentation [sec]')
+axes[row].set_xlabel('Time from estimated odor presentation [sec]')
 fig.suptitle(incl_descr)
 
 plt.savefig(fig_path + '\\Pupil_' + incl_descr + '.png')
