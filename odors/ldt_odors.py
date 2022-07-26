@@ -17,29 +17,54 @@ import seaborn as sns
 from scipy.ndimage import gaussian_filter1d
 import pandas as pd
 import os
+import copy
+import scipy.io
+import glob
 
 #%% Set parameters for analysis
 pre_event = 3
 post_event = 6
 bin_size = 0.25
-ifr_sr = 50 # number of data points / sec for instantenous firing rate
-save_plots = 'C:\\Users\\Kacper\\Desktop\\PSAM_SC\\plots_aligned\\'
+ifr_sr = 10 # number of data points / sec for instantenous firing rate
+save_plots = 'C:\\Users\\Kacper\\Desktop\\LDTg\\plots_good_sessions\\'
 
 if not os.path.exists(save_plots):
     os.makedirs(save_plots)
     
 #%% Specify files and paths
-sess_ids = ['211207_KK006', '211207_KK007', '211208_KK006', '211208_KK007', \
-           '211209_KK006', '211209_KK007', '211210_KK006', '211210_KK007']
+#sess_ids = ['220308_KK012', '220308_KK013', '220309_KK012', '220309_KK013', \
+#           '220310_KK012', '220310_KK013', '220311_KK012', '220311_KK013']
+sess_ids = ['220308_KK012', '220309_KK012', '220309_KK013', \
+            '220311_KK012', '220311_KK013']
+#sess_ids = ['220311_KK013']
     
-sniff_dir = r'C:\Users\Kacper\Desktop\PSAM_SC\data'
+sniff_dir = r'C:\Users\Kacper\Desktop\LDTg\data\only_sorted'
 
 spks_dirs = []
 for ses in sess_ids:
-    tmp = "W://preprocessed_data//ephys_sorted//catgt_"+ses+"_g0//"+ses+ "_g0_imec0//imec0_ks2//"
+    tmp = "W://preprocessed_data//ephys_sorted//catgt_"+ses+"_g0//"+ses+ "_g0_imec0//imec0_ks2_manual//"
     spks_dirs.append(tmp)
 
-    
+#%% Import histology data and define how it maps to animals / probe tracts
+h12 = r'C:\Users\Kacper\Desktop\LDTg\histology\KK012_CCF\processed\brain_structures.csv'
+h13 = r'C:\Users\Kacper\Desktop\LDTg\histology\KK013_CCF\processed\brain_structures.csv'
+
+# First col - probe # from Sharp-Track, 2nd - corresponding shank #
+pr_to_sh = np.array([[1, 3], [2, 2], [3, 1], [4, 0]])    
+
+h12 = pd.read_csv(h12); h13 = pd.read_csv(h13)
+# Repeat order of sessions
+hist = [copy.copy(h12), copy.copy(h12), copy.copy(h13), copy.copy(h12), copy.copy(h13)]
+
+# Add shank mapping to the histology dataframe
+nses = len(sess_ids)
+for ses in range(nses):
+    hist[ses].insert(0, 'Shank', 9)
+    for row in range(np.size(hist[ses]['Shank'])):
+        probe = hist[ses]['Probe'][row]
+        shank = pr_to_sh[pr_to_sh[:,0]==probe, 1] 
+        hist[ses]['Shank'][row] = shank
+
 #%% Import ephys data
 spks_ts = []
 spks_id = []
@@ -54,23 +79,73 @@ for curr_dir in spks_dirs:
 #all_id = np.concatenate([units_id, mua_id])
 
 #%% Import cluster info
+
+### IF DATA NOT MANUALLY SORTED< USE FILE CLUSTER_GROUP (_INFO DOES NOT EXIST) ###### 
+
 clst_info = []
 chan_pos = []
+chan_map = []
 
 for curr_dir in spks_dirs:
     tmp = pd.read_csv(curr_dir + "cluster_info.tsv", sep='\t')
+    tmp['FP_label'] = 'None';  tmp['FP_abbrv'] = 'None' # add columns for anatomy labels
+    tmp['CCF_label'] = 'None'; tmp['CCF_abbrv'] = 'None'
+    
     tmp2 = np.load(curr_dir + "channel_positions.npy")
+    
+    curr_dir = os.path.dirname(os.path.dirname(curr_dir)) # go folder up for channel map
+    curr_dir = glob.glob(curr_dir + '/*chanMap.mat')[0]
+    tmp3 = scipy.io.loadmat(curr_dir)
+    
     clst_info.append(tmp)
     chan_pos.append(tmp2)
+    chan_map.append(tmp3)
     
 
 #%% Import odor trial data
 sniffs = st.import_sniff_mat(sniff_dir, expect_files = 4)
 
 #%% Get some basic variables
-nses = len(sniffs)
 ntrials = sniffs[0]['trial_idx'].size
 npres = max(sniffs[0]['trial_occur'])
+
+#%% Get anatomical labels of each unit
+
+# First, correct shank number - channel_positions maps it wrongly!!
+for ses in range(nses):
+    chans = clst_info[ses].ch    
+    for row in range(np.size(chans)):
+        shank = int(chan_map[ses]['kcoords'][chans[row]] - 1)
+        clst_info[ses].sh[row] = shank
+    
+    # for row in range(np.size(chans)):
+    #     if ((chans[row] >= 0) and (chans[row] <= 47)) or ((chans[row] >= 96) and (chans[row] <= 143)):
+    #         clst_info[ses].sh[row] = 0 # shank 0
+    #     if ((chans[row] >= 48) and (chans[row] <= 95)) or ((chans[row] >= 144) and (chans[row] <= 191)):
+    #         clst_info[ses].sh[row] = 1 # shank 1
+    #     if ((chans[row] >= 192) and (chans[row] <= 239)) or ((chans[row] >= 288) and (chans[row] <= 335)):
+    #         clst_info[ses].sh[row] = 2 # shank 2
+    #     if ((chans[row] >= 240) and (chans[row] <= 287)) or ((chans[row] >= 336) and (chans[row] <= 383)):
+    #         clst_info[ses].sh[row] = 3 # shank 3
+
+for ses in range(nses):
+    for row in range(np.size(clst_info[ses]['id'])):
+        # match units to electrode locations
+        shank = clst_info[ses]['sh'][row]
+        depth = clst_info[ses]['depth'][row]
+        which_hist = np.logical_and((hist[ses]['Shank'] == shank), (hist[ses]['Pos_from_tip'] == depth))
+        
+        # add updated FP atlas labels
+        label = hist[ses]['FP_abbrv'][which_hist].values[0]
+        fullname = hist[ses]['FP_name'][which_hist].values[0]
+        clst_info[ses]['FP_label'][row] = fullname
+        clst_info[ses]['FP_abbrv'][row] = label
+        
+        # add classic Allen labels
+        label = hist[ses]['CCF_abbrv'][which_hist].values[0]
+        fullname = hist[ses]['CCF_name'][which_hist].values[0]
+        clst_info[ses]['CCF_label'][row] = fullname
+        clst_info[ses]['CCF_abbrv'][row] = label
 
 #%% Calculate rasterplots
 cntrd_ts = []
@@ -79,8 +154,8 @@ all_fr = []; mean_fr = []; sem_fr = []; t_vec = []
 for idx, ses in enumerate(spks_ts):
     print('Calculating ' + str(idx+1) + '/' + str(len(spks_ts)))
     
-    tmp = ep.calc_rasters(ses, sniffs[idx]['aligned_onsets'], pre_event, post_event)
-    # sniffs[idx]['ephys_onsets'] # for aligned to olfactometer TTL, not 1st sniff
+    #tmp = ep.calc_rasters(ses, sniffs[idx]['aligned_onsets'], pre_event, post_event)
+    tmp = ep.calc_rasters(ses, sniffs[idx]['ephys_onsets'], pre_event, post_event)
     cntrd_ts.append(tmp)
 
     tmp = ep.fr_events_binless(cntrd_ts[idx], 0.100, 4, ifr_sr, pre_event, post_event)
@@ -172,8 +247,7 @@ for s in range(nses):
     unit_pos.append(tmp2)
     
 #%% Plot responsivity vs. location
-rec_pairs = [[0, 4], [1, 5], [2, 6], [3, 7]]
-rec_des = ['saline', 'saline', 'PSEM', 'PSEM', 'saline', 'saline', 'PSEM', 'PSEM']
+rec_pairs = [[1, 3], [2, 4]]
 
 save_dir = save_plots + 'response_locations\\'
 #save_dir = save_plots + 'response_latencies\\'
@@ -187,7 +261,7 @@ for pair in rec_pairs:
     y = np.hstack([unit_pos[pair[0]][:,1], unit_pos[pair[1]][:,1]])
     val = np.hstack([ grav[pair[0]],  grav[pair[1]]])
 
-    fig_title = sess_ids[pair[0]][-5:] + ', ' + rec_des[pair[0]]
+    fig_title = sess_ids[pair[0]][-5:]
     
     plt.figure(figsize = (4,8))
     plt.scatter(x, y, val*200)
@@ -200,12 +274,12 @@ for pair in rec_pairs:
 
 
 #%% Check odorant selectivity
-hab_win = 3 # period after odor presentation used for plotting habituation curves
+hab_win = 1 # period after odor presentation used for plotting habituation curves; set 1 for aligned
 tr_cat = st.select_trials_nov(sniffs,1,1,1,1)[0]
 unique_odors = [np.unique(sniffs[s]['trial_chem_id']) for s in range(nses)]
 n_odors = [unique_odors[s].size for s in range(nses)]
 
-save_dir = save_plots + 'odor_selectivity_fr\\'
+save_dir = save_plots + 'odor_selectivity_loc_aligned_allen\\'
 if not os.path.exists(save_dir):
     os.makedirs(save_dir)
 plt.ioff()
@@ -238,7 +312,7 @@ for s in range(nses):
                         
                     axes[0, cat].eventplot(tmp, color = cmap(a), lineoffsets = ypos, linewidths = 0.5)
                     axes[1, cat].plot(t_vec[s], np.mean(tmp2, 0), color = cmap(a), linewidth = 1)
-                    tmp3 = np.mean(tmp2[:,pre_event*ifr_sr : pre_event*ifr_sr+hab_win*ifr_sr], 1) # habituation curve
+                    tmp3 = np.mean(tmp2[:,int(pre_event*ifr_sr) : int(pre_event*ifr_sr+hab_win*ifr_sr)], 1) # habituation curve
                     axes[2, cat].plot(tmp3, "o-", markersize = 1.5, linewidth = 0.8, color = cmap(a))
                     
                     axes[0, cat].axvline(x = 0, linestyle = '-', color = 'gray', linewidth = 0.5)
@@ -268,7 +342,13 @@ for s in range(nses):
         axes[1,0].sharex(axes[1,1])            
         fig.subplots_adjust(wspace=0.1, hspace=0.15)
         
-        fig.savefig(tmp_dir + str(spks_id[s][nrn]) + '.png', dpi = 250)
+        unit_id = spks_id[s][nrn]
+        unit_abbrv = clst_info[s]['CCF_abbrv'][clst_info[s]['id'] == unit_id].values[0]
+        unit_label = clst_info[s]['CCF_label'][clst_info[s]['id'] == unit_id].values[0]
+        shank = clst_info[s]['sh'][clst_info[s]['id'] == unit_id].values[0]
+        
+        fig.suptitle(unit_label + ': ' + 'sh ' + str(shank) + ', ' + str(unit_id))
+        fig.savefig(tmp_dir + unit_abbrv + ' - ' + str(unit_id) + '.png', dpi = 250)
         plt.close(fig)
         
 plt.ion()

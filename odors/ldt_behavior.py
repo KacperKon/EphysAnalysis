@@ -12,7 +12,7 @@ sys.path.append(r'C:\Users\Kacper\Documents\Python Scripts\Sniff')
 import sniff_tools as st
 
 #%% Specify paths and some global analysis parameteres
-data_path = sniff_dir = r'C:\Users\Kacper\Desktop\PSAM_SC\data'
+data_path = sniff_dir = r'C:\Users\Kacper\Desktop\LDTg\data'
 sal_ses = [0, 1, 4, 5] # sessions with saline, not DREADD
 expect_files = 4 # how many files per mice you expect
 nframes = 662 # how many camera frames per trial you expect
@@ -20,15 +20,15 @@ pup_nframes = 373 # the same for pupil camera
 pup_sr = pup_nframes/12
 sigma = 0.25
 binsize = 2 # for binned analysis, bin size in seconds
-est_lat = 0 # estimated olfactometer latency
+est_lat = 0.8 # estimated olfactometer latency
 odor_start = 4 + est_lat
 odor_end = 6 + est_lat
 bsln_start = 1
 ndays = 4
-sniff_the_bin = [5, 8] # concentrate on this part - from 1 sec to 3 sec after odor presentation
-pup_bin = [6, 9] # this can be different for pupil, which has slower dynamics
+sniff_the_bin = [6, 8] # concentrate on this part - from 1 sec to 3 sec after odor presentation
+pup_bin = [6, 10] # this can be different for pupil, which has slower dynamics
 
-fig_path = r'C:\Users\Kacper\Desktop\PSAM_SC\plots\behavior'
+fig_path = r'C:\Users\Kacper\Desktop\LDTg\plots\behavior'
 
 #%% Import sniffing and trial data as a list of dictionaries - 1 dictionary for each mouse or session
 sniffs = st.import_sniff_mat(data_path, expect_files)
@@ -94,7 +94,7 @@ for m in range(nses):
         which_incl = sniffs[m]['trial_idx'][np.where(tr_incl[m][:,cat] == 1)] - 1 # IN MATLAB TRIAL INDEXES START FROM 1!!
         
         tmp_data = pup_delta[which_incl, :, m].T
-        tmp_data = pup_m[which_incl, :, m].T
+        #tmp_data = pup_m[which_incl, :, m].T
         
         pup_av[:,m,cat] = np.nanmean(tmp_data, 1)
         pup_sem[:,m,cat] = np.nanstd(tmp_data, 1) / np.sqrt(pup_n[cat])

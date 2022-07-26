@@ -16,6 +16,12 @@ Created on Mon Jan 24 17:23:58 2022
     # Separate file for preprocess, load data with command
     # Exclude some neurons (Jennifer Colonel)
     # So new version of import
+    # Maybe also update functions to work both for single rec and multiple recs?
+    # cluster info vs. cluster group
+    # Plot mean fr (and rasters?) also presentation, rather than odor, selective
+    # For LDTg - think of how to check if neuron tracks phasic vs. tonic arousal:
+        # phasic should be just modulation index, but tonic - for example firing rate during preblock vs. novelty period
+    # For LDTg - you can plot modulation index in the sound period (0.5sec) and odor period (after)
 
 # Difficult jobs:
     # Modulation index 
