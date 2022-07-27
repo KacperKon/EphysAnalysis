@@ -104,19 +104,23 @@ def checkSignificanceROC_fast2(responseVector,predictionVector):
     return ROCV
 
 
-
 #%% Prepare data etc.
 s = 4
-nrn = 4
+nrn = 3
 roc_win_sec = 3 # window size for ROC significance (in sec, how long before and after stimulus to analyze)
+roc_sr = 10 # sampling rate to which downsample neural data, in Hz (otherwise analysis is very slow)
 myseed = 10
-roc_from = int(pre_event*ifr_sr - roc_win_sec*ifr_sr)
-roc_to = int(pre_event*ifr_sr + roc_win_sec*ifr_sr)
+
+
+roc_from = int(pre_event*roc_sr - roc_win_sec*roc_sr)
+roc_to = int(pre_event*roc_sr + roc_win_sec*roc_sr)
 
 prediction_len  = int((roc_to-roc_from)/2)
 prediction = np.concatenate([np.zeros(prediction_len), np.ones(prediction_len)])
 
-response = all_fr[s][nrn][:,roc_from:roc_to]
+response = all_fr[s][nrn][:,::int(ifr_sr / roc_sr)] # select neuron and downsample
+response = response[:,roc_from:roc_to] # select window for analysis
+
 
 #%% Test versions
 
@@ -125,7 +129,7 @@ random.seed(myseed)
 start = time.time()
 print("Sci-kit default version")
 
-#a = checkSignificanceROC(response, prediction)
+a = checkSignificanceROC(response, prediction)
 
 end = time.time()
 print(str(end - start) + " sec")

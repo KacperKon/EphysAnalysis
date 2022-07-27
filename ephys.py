@@ -11,6 +11,9 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from scipy.ndimage import gaussian_filter1d
+from numba import jit
+import random
+
 #%%
 def read_spikes(spks_dir, sampling_rate = 30000.0, read_only = "good"):
     """
@@ -439,3 +442,62 @@ def fr_by_chan(spikes_ts, units_id, cluster_info_dir, bin_size):
     mean_fr = np.mean(all_fr, 1)
 
     return all_fr, mean_fr, bin_edges
+
+
+@jit
+def checkSignificanceROC_fast(responseVector,predictionVector, numIters = 1000, sigThr = 0.05):
+    """
+    Verify is response to stimulus in each trial is significantly higher or 
+    lower than random, based on area under ROC curve.
+    Based on function written by Eleonore Schiltz, Haesler Lab 2022.
+    
+    *** 
+    This is a simplified version using Numba, ~100 times faster than the original.
+    The significance results were for ~98% trials consistent with the original
+    implementation, based on roc_auc_score function from the sci-kit learn.
+    However, exact values of ROC area under curve might differ.
+    ***
+    
+    Parameters
+    ----------
+    responseVector : firing rate; array of size n trials x n time points
+    predictionVector : is stimulus present?; binary array of size n time points
+    numIters : number of permutations for significance testing; integer
+    sigThr : p-value threshold (2-sided) for testing against random scores; float
+
+    Returns
+    -------
+    ROCV : 2-dim array, of size n trials x 2:
+        - column 0 - auROC score
+        - column 1 - result of significance testing (-1: lower than baseline, 
+            +1: higher, 0: non-significant)
+    """
+        
+    def auc(y_true, y_score):
+        """Simplified implementation to check for correctness of
+        `roc_auc_score`, copied from sci-kit learn metrics/_ranking.py"""
+        pos_label = np.unique(y_true)[1]
+
+        # Count the number of times positive samples are correctly ranked above
+        # negative samples.
+        pos = y_score[y_true == pos_label]
+        neg = y_score[y_true != pos_label]
+        diff_matrix = pos.reshape(1, -1) - neg.reshape(-1, 1)
+        n_correct = np.sum(diff_matrix > 0)
+
+        return n_correct / float(len(pos) * len(neg))
+        
+    
+    ROCV = np.zeros((len(responseVector),2))
+    for ind in range(len(responseVector)):
+        ROCV[ind,0] = auc(predictionVector,responseVector[ind])
+        randomValue = np.zeros(numIters)
+        for rand in range(numIters):
+            randomValue[rand]=auc(np.random.permutation(predictionVector),responseVector[ind])
+        if ROCV[ind,0]<np.percentile(randomValue,sigThr*100):
+            ROCV[ind,1] = -1 #inhibited
+        elif ROCV[ind,0]>np.percentile(randomValue,(1-sigThr)*100):
+            ROCV[ind,1] = 1 #excited
+        else:
+            ROCV[ind,1] = 0 #non significant
+    return ROCV

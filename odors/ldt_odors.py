@@ -20,12 +20,13 @@ import os
 import copy
 import scipy.io
 import glob
+import time
 
 #%% Set parameters for analysis
 pre_event = 3
 post_event = 6
 bin_size = 0.25
-ifr_sr = 10 # number of data points / sec for instantenous firing rate
+ifr_sr = 50 # number of data points / sec for instantenous firing rate
 save_plots = 'C:\\Users\\Kacper\\Desktop\\LDTg\\plots_good_sessions\\'
 
 if not os.path.exists(save_plots):
@@ -189,7 +190,7 @@ for ii in range(nses):
     
 #%% Plot responses of all neurons using one heatmap
 
-save_dir = save_plots + 'grand_average\\'
+save_dir = save_plots + 'grand_average_aligned\\'
 if not os.path.exists(save_dir):
     os.makedirs(save_dir)
     
@@ -273,13 +274,56 @@ for pair in rec_pairs:
     plt.savefig(save_dir + fig_title + '.png', dpi = 250)
 
 
+#%% Select neurons with significant responses
+
+roc_win_sec = 3 # window size for ROC significance (in sec, how long before and after stimulus to analyze)
+# set to 2 for aligned and 3 to non-aligned
+roc_sr = 10 # sampling rate to which downsample neural data, in Hz (otherwise analysis is very slow)
+
+roc_from = int(pre_event*roc_sr - roc_win_sec*roc_sr)
+roc_to = int(pre_event*roc_sr + roc_win_sec*roc_sr)
+
+prediction_len  = int((roc_to-roc_from)/2)
+prediction = np.concatenate([np.zeros(prediction_len), np.ones(prediction_len)])
+
+
+ROCV = []
+for s in range(nses):
+    start = time.time()
+    print('Session ' + str(s+1) + ' / ' + str(nses))
+    
+    ROC_ses = []
+    for nrn in range(len(cntrd_ts[s])):
+        
+        response = all_fr[s][nrn][:,::int(ifr_sr / roc_sr)] # select neuron and downsample
+        response = response[:,roc_from:roc_to] # select window for analysis
+        
+        tmp = ep.checkSignificanceROC_fast(response, prediction, numIters = 1000, sigThr = 0.001)
+        ROC_ses.append(tmp)
+        
+    ROCV.append(ROC_ses)
+        
+    end = time.time()
+    print('Executed in: ' + str(end - start) + ' sec')
+
+
+#%% Get idea on how many neurons are responsive to how many trials
+count_sig = []
+for s in range(nses):
+    n_cells = len(cntrd_ts[s])
+    tmp = np.zeros(n_cells)
+    for nrn in range(n_cells):
+        tmp[nrn] = np.sum(np.abs(ROCV[s][nrn][:,1]))
+    count_sig.append(tmp)
+
 #%% Check odorant selectivity
 hab_win = 1 # period after odor presentation used for plotting habituation curves; set 1 for aligned
+min_sig_tr = 18 # in how many trials (at least) we need responses to be significant
 tr_cat = st.select_trials_nov(sniffs,1,1,1,1)[0]
 unique_odors = [np.unique(sniffs[s]['trial_chem_id']) for s in range(nses)]
 n_odors = [unique_odors[s].size for s in range(nses)]
 
-save_dir = save_plots + 'odor_selectivity_loc_aligned_allen\\'
+save_dir = save_plots + 'odor_selectivity_sig_001_aligned\\'
 if not os.path.exists(save_dir):
     os.makedirs(save_dir)
 plt.ioff()
@@ -292,64 +336,68 @@ for s in range(nses):
         os.mkdir(tmp_dir)
     
     for nrn in range(len(cntrd_ts[s])):
-        fig, axes = plt.subplots(3, 2, sharey = 'row')
-        cmap = plt.get_cmap("tab10") 
-        a = 0
         
-        for cat in range(2):
-            ymax = 0
+        count_sig = np.sum(np.abs(ROCV[s][nrn][:,1]))
+        if count_sig >= min_sig_tr:
         
-            for o, odor in enumerate(unique_odors[s]):
-                which_rows = np.logical_and(sniffs[s]['trial_chem_id'] == odor, tr_cat[s][:,cat]) 
-                odor_idxs = sniffs[s]['trial_idx'][which_rows] - 1
+            fig, axes = plt.subplots(3, 2, sharey = 'row')
+            cmap = plt.get_cmap("tab10") 
+            a = 0
             
-                if odor_idxs.size > 0:
-                    tmp = [cntrd_ts[s][nrn][i] for i in odor_idxs]
-                    tmp2 = all_fr[s][nrn][odor_idxs,:]
-                    ymin = ymax
-                    ymax = ymax + len(tmp)  
-                    ypos = np.arange(ymin, ymax)
+            for cat in range(2):
+                ymax = 0
+            
+                for o, odor in enumerate(unique_odors[s]):
+                    which_rows = np.logical_and(sniffs[s]['trial_chem_id'] == odor, tr_cat[s][:,cat]) 
+                    odor_idxs = sniffs[s]['trial_idx'][which_rows] - 1
+                
+                    if odor_idxs.size > 0:
+                        tmp = [cntrd_ts[s][nrn][i] for i in odor_idxs]
+                        tmp2 = all_fr[s][nrn][odor_idxs,:]
+                        ymin = ymax
+                        ymax = ymax + len(tmp)  
+                        ypos = np.arange(ymin, ymax)
+                            
+                        axes[0, cat].eventplot(tmp, color = cmap(a), lineoffsets = ypos, linewidths = 0.5)
+                        axes[1, cat].plot(t_vec[s], np.mean(tmp2, 0), color = cmap(a), linewidth = 1)
+                        tmp3 = np.mean(tmp2[:,int(pre_event*ifr_sr) : int(pre_event*ifr_sr+hab_win*ifr_sr)], 1) # habituation curve
+                        axes[2, cat].plot(tmp3, "o-", markersize = 1.5, linewidth = 0.8, color = cmap(a))
                         
-                    axes[0, cat].eventplot(tmp, color = cmap(a), lineoffsets = ypos, linewidths = 0.5)
-                    axes[1, cat].plot(t_vec[s], np.mean(tmp2, 0), color = cmap(a), linewidth = 1)
-                    tmp3 = np.mean(tmp2[:,int(pre_event*ifr_sr) : int(pre_event*ifr_sr+hab_win*ifr_sr)], 1) # habituation curve
-                    axes[2, cat].plot(tmp3, "o-", markersize = 1.5, linewidth = 0.8, color = cmap(a))
-                    
-                    axes[0, cat].axvline(x = 0, linestyle = '-', color = 'gray', linewidth = 0.5)
-                    axes[1, cat].axvline(x = 0, linestyle = '-', color = 'gray', linewidth = 0.5)
-                    
-                    #### Adjust visuals & set labels #### 
-                    axes[0,0].set_title('Familiar odors', size = 8)
-                    axes[0,1].set_title('Novel odors', size = 8)
-                    
-                    ## Two upper rows ##
-                    axes[0,cat].tick_params(axis="both",direction="in", labelsize = 6)
-                    axes[1,cat].xaxis.set_ticklabels([])
-                    axes[1,cat].tick_params(axis="both",direction="in", top = True, labelsize = 6)
-                    
-                    axes[1,cat].set_xlabel("Time from odor [sec]", size = 6, labelpad = 0)
-                    axes[0,0].set_ylabel("Trial", size = 6, labelpad = 0)
-                    axes[1,0].set_ylabel("Mean firing rate", size = 6, labelpad = 0)
-                    
-                    ## Bottom row ##
-                    axes[2,cat].tick_params(axis="both",direction="in", labelsize = 6)
-                    axes[2,0].set_ylabel("Mean response", size = 6, labelpad = 0)
-                    axes[2,cat].set_xlabel("Odor occurence", size = 6, labelpad = 0)
-
-                    a = a + 1
-        
-        axes[0,0].sharex(axes[0,1])
-        axes[1,0].sharex(axes[1,1])            
-        fig.subplots_adjust(wspace=0.1, hspace=0.15)
-        
-        unit_id = spks_id[s][nrn]
-        unit_abbrv = clst_info[s]['CCF_abbrv'][clst_info[s]['id'] == unit_id].values[0]
-        unit_label = clst_info[s]['CCF_label'][clst_info[s]['id'] == unit_id].values[0]
-        shank = clst_info[s]['sh'][clst_info[s]['id'] == unit_id].values[0]
-        
-        fig.suptitle(unit_label + ': ' + 'sh ' + str(shank) + ', ' + str(unit_id))
-        fig.savefig(tmp_dir + unit_abbrv + ' - ' + str(unit_id) + '.png', dpi = 250)
-        plt.close(fig)
+                        axes[0, cat].axvline(x = 0, linestyle = '-', color = 'gray', linewidth = 0.5)
+                        axes[1, cat].axvline(x = 0, linestyle = '-', color = 'gray', linewidth = 0.5)
+                        
+                        #### Adjust visuals & set labels #### 
+                        axes[0,0].set_title('Familiar odors', size = 8)
+                        axes[0,1].set_title('Novel odors', size = 8)
+                        
+                        ## Two upper rows ##
+                        axes[0,cat].tick_params(axis="both",direction="in", labelsize = 6)
+                        axes[1,cat].xaxis.set_ticklabels([])
+                        axes[1,cat].tick_params(axis="both",direction="in", top = True, labelsize = 6)
+                        
+                        axes[1,cat].set_xlabel("Time from odor [sec]", size = 6, labelpad = 0)
+                        axes[0,0].set_ylabel("Trial", size = 6, labelpad = 0)
+                        axes[1,0].set_ylabel("Mean firing rate", size = 6, labelpad = 0)
+                        
+                        ## Bottom row ##
+                        axes[2,cat].tick_params(axis="both",direction="in", labelsize = 6)
+                        axes[2,0].set_ylabel("Mean response", size = 6, labelpad = 0)
+                        axes[2,cat].set_xlabel("Odor occurence", size = 6, labelpad = 0)
+    
+                        a = a + 1
+            
+            axes[0,0].sharex(axes[0,1])
+            axes[1,0].sharex(axes[1,1])            
+            fig.subplots_adjust(wspace=0.1, hspace=0.15)
+            
+            unit_id = spks_id[s][nrn]
+            unit_abbrv = clst_info[s]['FP_abbrv'][clst_info[s]['id'] == unit_id].values[0]
+            unit_label = clst_info[s]['FP_label'][clst_info[s]['id'] == unit_id].values[0]
+            shank = clst_info[s]['sh'][clst_info[s]['id'] == unit_id].values[0]
+            
+            fig.suptitle('sh' + str(shank) + ' , ' + unit_label + ', ' + str(unit_id))
+            fig.savefig(tmp_dir + 'sh ' + str(shank) + '_' + unit_abbrv + '_' + str(unit_id) + '.png', dpi = 250)
+            plt.close(fig)
         
 plt.ion()
 

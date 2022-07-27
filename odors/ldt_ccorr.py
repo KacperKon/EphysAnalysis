@@ -18,11 +18,8 @@ start_ms = 0.5 # start of data window within the trials
 stop_ms = 2.5 # end of data window
 bin_edges_xcorr = np.arange(-win_ms, win_ms + bin_ms, bin_ms)
 
-units_pbn = [7, 8, 310, 180, 183] # 179 from lPBN did not respond
-units_ldt = [93, 94, 98, 107, 111, 114, 115, 149, 384]
-
-units_ldt = [7, 8, 9, 19, 20, 310, 386]
-units_pbn = [235, 239, 245, 252, 232, 93, 94, 61, 378]
+units_ldt = [7, 8, 9, 19, 20, 310, 386, 387]
+units_pbn = [61, 71, 378, 156, 180, 235, 239, 245, 252]
 
 n_pbn = len(units_pbn)
 n_ldt = len(units_ldt)
